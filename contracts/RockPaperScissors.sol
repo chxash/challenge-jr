@@ -73,8 +73,8 @@ contract RockPaperScissors {
         resetPlayersInfo();
     }
 
-    // Hash move pour cacher ?
-    // Gas cost
+    // In order to have a secure game, we would need to require each user to send a hash of [random value, move] as a first commitment.
+    // Then the users would reveal their move in a second step.
     function submitMove(string memory move) public {
         // checking if player already paid required tokens
         require(requiredDeposit <= balances[msg.sender], "Minimum balance is required");
