@@ -42,14 +42,13 @@ contract RockPaperScissors {
         balances[msg.sender] += msg.value;
     }
 
-    // prevent withdrawal if in game
     function withdraw(uint256 amount) external {
         require(amount <= balances[msg.sender], "Insufficient funds");
+        require(playersInfo[msg.sender].state != State.MOVE_SUBMITTED && playersInfo[msg.sender].state != State.ENROLLED, "Withdrawing funds is not permitted while playing");
         balances[msg.sender]-=amount;
         payable(msg.sender).transfer(amount);
     }
 
-    // Method to be called in order to 
     function startGame() external {
         require(requiredDeposit <= balances[msg.sender], "Minimum balance is required");
         require(playersInfo[msg.sender].state != State.ENROLLED, "Player is already enrolled");
@@ -67,9 +66,15 @@ contract RockPaperScissors {
         emit PlayerEnrolled(msg.sender);
     }
 
+    // This method can be called to cancel a game before an opponent has been matched
+    // Afterwards, it's not possible anymore to cancel a game
+    function cancelGame() external {
+        require(playersInfo[msg.sender].state == State.ENROLLED && playersInfo[msg.sender].opponent == address(0), "Only started games without opponents can be cancelled");
+        resetPlayersInfo();
+    }
+
     // Hash move pour cacher ?
     // Gas cost
-
     function submitMove(string memory move) public {
         // checking if player already paid required tokens
         require(requiredDeposit <= balances[msg.sender], "Minimum balance is required");

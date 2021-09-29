@@ -39,6 +39,24 @@ describe("RockPaperScissors", function () {
         await expect(this.contract.withdraw(2)).to.be.revertedWith('Insufficient funds');
         expect(await this.contract.balances(this.alice.address)).to.equal(1);
       });
+
+      it("Should not be possible to withdraw if player is enrolled", async function () {
+        await this.alice.sendTransaction({ to: this.contract.address, value: 100 });
+        await this.contract.startGame();
+
+        await expect(this.contract.withdraw(2)).to.be.revertedWith('Withdrawing funds is not permitted while playing');
+      });
+
+      it("Should not be possible to withdraw if player has submitted a move", async function () {
+        await this.alice.sendTransaction({ to: this.contract.address, value: 100 });
+        await this.bob.sendTransaction({ to: this.contract.address, value: 102 });
+
+        await this.contract.startGame();
+        await this.contract.connect(this.bob).startGame();
+        await this.contract.submitMove("ROCK");
+
+        await expect(this.contract.withdraw(2)).to.be.revertedWith('Withdrawing funds is not permitted while playing');
+      });
     });
 
     describe("startGame() method", function () {
@@ -58,6 +76,25 @@ describe("RockPaperScissors", function () {
         await expect(this.contract.connect(this.bob).startGame()).to.be.revertedWith('Player is already enrolled');
       });
     });
+
+    describe("cancelGame() method", function () {
+      it("Should be possible to cancel a game if player is enrolled", async function () {
+        await this.alice.sendTransaction({ to: this.contract.address, value: 102 });
+        await this.contract.startGame();
+
+        await expect(this.contract.cancelGame()).to.not.be.reverted;
+      });
+
+      it("Should not be possible to cancel a game if player is enrolled but an opponent has been matched", async function () {
+        await this.alice.sendTransaction({ to: this.contract.address, value: 102 });
+        await this.bob.sendTransaction({ to: this.contract.address, value: 101 });
+        await this.contract.startGame();
+        await this.contract.connect(this.bob).startGame();
+
+        await expect(this.contract.cancelGame()).to.be.revertedWith('Only started games without opponents can be cancelled');
+      });
+    });
+
 
     describe("submitMove() method", function () {
       it("Should not proceed if balance is less than required deposit", async function () {
