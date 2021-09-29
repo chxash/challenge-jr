@@ -44,7 +44,7 @@ describe("RockPaperScissors", function () {
         await this.alice.sendTransaction({ to: this.contract.address, value: 100 });
         await this.contract.startGame();
 
-        await expect(this.contract.withdraw(2)).to.be.revertedWith('Withdrawing funds is not permitted while playing');
+        await expect(this.contract.withdraw(2)).to.be.revertedWith('No withdrawals while playing');
       });
 
       it("Should not be possible to withdraw if player has submitted a move", async function () {
@@ -55,7 +55,7 @@ describe("RockPaperScissors", function () {
         await this.contract.connect(this.bob).startGame();
         await this.contract.submitMove("ROCK");
 
-        await expect(this.contract.withdraw(2)).to.be.revertedWith('Withdrawing funds is not permitted while playing');
+        await expect(this.contract.withdraw(2)).to.be.revertedWith('No withdrawals while playing');
       });
     });
 
@@ -91,7 +91,18 @@ describe("RockPaperScissors", function () {
         await this.contract.startGame();
         await this.contract.connect(this.bob).startGame();
 
-        await expect(this.contract.cancelGame()).to.be.revertedWith('Only started games without opponents can be cancelled');
+        await expect(this.contract.cancelGame()).to.be.revertedWith('Current game is not cancellable');
+      });
+
+      it("Should be possible to start / cancel game multiple times", async function () {
+        await this.alice.sendTransaction({ to: this.contract.address, value: 102 });
+        await this.contract.startGame();
+
+        await expect(this.contract.cancelGame()).to.not.be.reverted;
+
+        await this.contract.startGame();
+
+        await expect(this.contract.cancelGame()).to.not.be.reverted;
       });
     });
 
@@ -189,6 +200,15 @@ describe("RockPaperScissors", function () {
           expect(await this.contract.balances(this.bob.address)).to.equal(3);
           await expect(this.contract.startGame()).to.not.be.reverted;
           await expect(this.contract.connect(this.bob).startGame()).to.be.revertedWith('Minimum balance is required');
+        });
+
+        it("should be possible to withdraw after game is finished", async function () {
+          await this.contract.submitMove("ROCK");
+          await this.contract.connect(this.bob).submitMove("SCISSORS");
+          expect(await this.contract.balances(this.alice.address)).to.equal(202);
+          expect(await this.contract.balances(this.bob.address)).to.equal(3);
+          await expect(() => this.contract.withdraw(1)).to.changeEtherBalances([this.alice, this.contract], [1, -1]);
+          await expect(() => this.contract.connect(this.bob).withdraw(2)).to.changeEtherBalances([this.bob, this.contract], [2, -2]);
         });
 
         it("should not be possible to punish an uncooperative player before a 1 day delay", async function () {

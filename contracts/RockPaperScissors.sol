@@ -1,8 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-import "hardhat/console.sol";
-
 // Workflow for a user is :
 // 1. Deposit to the contract
 // 2. Call startGame() method
@@ -35,7 +33,6 @@ contract RockPaperScissors {
     mapping (address => PlayerInfo) internal playersInfo;
 
     constructor() {
-        console.log("Deploying Rock Paper Scissors game");
     }
 
     receive() external payable {
@@ -44,19 +41,22 @@ contract RockPaperScissors {
 
     function withdraw(uint256 amount) external {
         require(amount <= balances[msg.sender], "Insufficient funds");
-        require(playersInfo[msg.sender].state != State.MOVE_SUBMITTED && playersInfo[msg.sender].state != State.ENROLLED, "Withdrawing funds is not permitted while playing");
+        require(playersInfo[msg.sender].state != State.MOVE_SUBMITTED && playersInfo[msg.sender].state != State.ENROLLED, "No withdrawals while playing");
         balances[msg.sender]-=amount;
         payable(msg.sender).transfer(amount);
     }
 
     function startGame() external {
         require(requiredDeposit <= balances[msg.sender], "Minimum balance is required");
-        require(playersInfo[msg.sender].state != State.ENROLLED, "Player is already enrolled");
 
-        playersInfo[msg.sender].state = State.ENROLLED;
+        PlayerInfo storage player = playersInfo[msg.sender];
+
+        require(player.state != State.ENROLLED, "Player is already enrolled");
+
+        player.state = State.ENROLLED;
 
         if (latestAvailableOpponentAddress != address(0)) {
-            playersInfo[msg.sender].opponent = latestAvailableOpponentAddress;
+            player.opponent = latestAvailableOpponentAddress;
             playersInfo[latestAvailableOpponentAddress].opponent = msg.sender;
             latestAvailableOpponentAddress = address(0);
         } else {
@@ -69,36 +69,40 @@ contract RockPaperScissors {
     // This method can be called to cancel a game before an opponent has been matched
     // Afterwards, it's not possible anymore to cancel a game
     function cancelGame() external {
-        require(playersInfo[msg.sender].state == State.ENROLLED && playersInfo[msg.sender].opponent == address(0), "Only started games without opponents can be cancelled");
+        require(playersInfo[msg.sender].state == State.ENROLLED && playersInfo[msg.sender].opponent == address(0), "Current game is not cancellable");
+        if (latestAvailableOpponentAddress == msg.sender) {
+            latestAvailableOpponentAddress = address(0);
+        }
+
         resetPlayersInfo();
     }
 
     // In order to have a secure game, we would need to require each user to send a hash of [random value, move] as a first commitment.
     // Then the users would reveal their move in a second step.
     function submitMove(string memory move) public {
+        PlayerInfo storage player = playersInfo[msg.sender];
+
         // checking if player already paid required tokens
         require(requiredDeposit <= balances[msg.sender], "Minimum balance is required");
-        require(playersInfo[msg.sender].state == State.ENROLLED, "Player is not enrolled yet");
+        require(player.state == State.ENROLLED, "Player is not enrolled yet");
 
         //checking if 2 players are enrolled
-        require(playersInfo[msg.sender].opponent != address(0), "No opponent is enrolled yet");
+        require(player.opponent != address(0), "No opponent is enrolled yet");
 
         // discard invalid moves
         require(compareStrings(move, MoveRock) || compareStrings(move, MovePaper) || compareStrings(move, MoveScissors), "Submitted move is invalid");
 
-        playersInfo[msg.sender].state = State.MOVE_SUBMITTED;
+        player.state = State.MOVE_SUBMITTED;
+        player.move = move;
 
-        playersInfo[msg.sender].move = move;
-
-        // storage or memory ?
-        PlayerInfo storage opponent = playersInfo[playersInfo[msg.sender].opponent];
+        PlayerInfo storage opponent = playersInfo[player.opponent];
         //checking if opponent already played => resolution
         if (opponent.state == State.MOVE_SUBMITTED) {
             // Equality
-            if (compareStrings(playersInfo[msg.sender].move, opponent.move)) {
+            if (compareStrings(player.move, opponent.move)) {
                 resolveTie();
             }
-            else if (compareStrings(playersInfo[msg.sender].move, MoveRock)) {
+            else if (compareStrings(player.move, MoveRock)) {
                 // ROCK > SCISSORS
                 if (compareStrings(opponent.move, MoveScissors)) {
                     resolveWin();
@@ -109,7 +113,7 @@ contract RockPaperScissors {
                     resolveLose();
                 }
             }
-            else if (compareStrings(playersInfo[msg.sender].move, MovePaper)) {
+            else if (compareStrings(player.move, MovePaper)) {
                 // PAPER > ROCK
                 if (compareStrings(opponent.move, MoveRock)) {
                     resolveWin();
@@ -146,33 +150,24 @@ contract RockPaperScissors {
     }
 
     function resolveWin() internal {
-        console.log("Hero won");
         balances[playersInfo[msg.sender].opponent]-=requiredDeposit;
         balances[msg.sender]+=requiredDeposit;
         resetPlayersInfo();
     }
 
     function resolveLose() internal {
-        console.log("Hero lost");
         balances[playersInfo[msg.sender].opponent]+=requiredDeposit;
         balances[msg.sender]-=requiredDeposit;
         resetPlayersInfo();
     }
 
     function resolveTie() internal {
-        console.log("it's a tie");
         resetPlayersInfo();
     }
 
     function resetPlayersInfo() internal {
-        playersInfo[msg.sender].state = State.IDLE;
-        playersInfo[msg.sender].opponent = address(0);
-        playersInfo[msg.sender].move = "";
-        playersInfo[msg.sender].timeout = 0;
-        playersInfo[playersInfo[msg.sender].opponent].state = State.IDLE;
-        playersInfo[playersInfo[msg.sender].opponent].opponent = address(0);
-        playersInfo[playersInfo[msg.sender].opponent].move = "";
-        playersInfo[playersInfo[msg.sender].opponent].timeout = 0;
+        delete playersInfo[playersInfo[msg.sender].opponent];
+        delete playersInfo[msg.sender];
     }
 
     function compareStrings(string memory a, string memory b) internal pure returns (bool) {
